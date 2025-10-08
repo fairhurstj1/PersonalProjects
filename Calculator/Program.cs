@@ -6,7 +6,9 @@
     {
         static void Main(string[] args)
         {
-            findArea();
+            findArea(26, 16, 1.75, 177);
+            findArea(25, 15, 1.75, 177);
+            findArea(24, 14, 1.75, 177);
         }
 
         static double area(double width, double height)
@@ -14,15 +16,12 @@
             return width * height;
         }
 
-        static void findArea()
+        static void findArea(double length1, double length2, double width, double targetArea)
         {
             double totalArea = 0;
-            const double length1 = 25;
-            const double length2 = 15;
-            double width = 1.75;
-            while (totalArea < 177)
+            while (totalArea < targetArea)
             {
-                if (totalArea < 177)
+                if (totalArea < targetArea)
                 {
                     totalArea = (area(length1, width) * 2) + (area(length2, width) * 2);
                     Console.WriteLine(totalArea);
