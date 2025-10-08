@@ -33,7 +33,7 @@
                     break;
                 }
             }
-            Console.WriteLine("Width: " + width);
+            Console.WriteLine("Width: " + width + " Area: " + totalArea);
         }
 
  
