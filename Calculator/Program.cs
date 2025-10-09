@@ -6,10 +6,7 @@
     {
         static void Main(string[] args)
         {
-            findArea(27, 17, 1.75, 177);
-            findArea(26, 16, 1.75, 177);
-            findArea(25, 15, 1.75, 177);
-            findArea(24, 14, 1.75, 177);
+            
         }
 
         static double area(double width, double height)
