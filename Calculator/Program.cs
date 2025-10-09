@@ -1,12 +1,14 @@
 ﻿namespace Calculator
 {
     using System;
+    using System.Formats.Asn1;
+    using System.Runtime.CompilerServices;
 
     class Program
     {
         static void Main(string[] args)
         {
-            
+            FindArea();
         }
 
         static double area(double width, double height)
@@ -14,15 +16,42 @@
             return width * height;
         }
 
-        static void findArea(double length1, double length2, double width, double targetArea)
+        static double Length()
+        {
+            double length;
+            Console.WriteLine("Enter length: ");
+            length = Convert.ToDouble(Console.ReadLine());
+            return length;
+        }
+
+        static double Width()
+        {
+            double width;
+            Console.WriteLine("Enter width: ");
+            width = Convert.ToDouble(Console.ReadLine());
+            return width;
+        }
+
+        static double TargetArea()
+        {
+            double filterArea;
+
+            filterArea = area(Length(), Width());
+            Console.WriteLine("Filter Area: " + filterArea);
+            return filterArea;
+        }
+        static void FindArea()
         {
             double totalArea = 0;
-            while (totalArea < targetArea)
+            double width = 0;
+
+
+            while (totalArea < TargetArea())
             {
-                if (totalArea < targetArea)
+                if (totalArea < TargetArea())
                 {
-                    totalArea = (area(length1, width) * 2) + (area(length2, width) * 2);
-                    Console.WriteLine(totalArea);
+                    totalArea = (Length() * width * 2) + (Width() * width * 2);
+                    Console.WriteLine("Total area: " + totalArea);
                     width += 0.25;
                 }
                 else
@@ -33,7 +62,12 @@
             Console.WriteLine("Width: " + width + " Area: " + totalArea);
         }
 
- 
 
+
+    }
+    
+    public class Area
+    {
+        
     }
 }
