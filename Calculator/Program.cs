@@ -1,22 +1,41 @@
 ﻿namespace Calculator
 {
     using System;
-    using System.Formats.Asn1;
-    using System.Runtime.CompilerServices;
 
-    class Program
+    public class Program
     {
         static void Main(string[] args)
         {
-            FindArea();
-        }
+            double width, length, area;
+            width = Area.FindWidth();
+            length = Area.FindLength();
+            area = Area.FindArea(width, length);
+            Console.WriteLine("The area is: " + area);
+            Console.WriteLine("Would you like to change the width and length of the outside panel?\n1. yes\n2. no");
+            int responseInt = Convert.ToInt32(Console.ReadLine());
+            switch (responseInt)
+            {
+                case 1:
+                    width = Area.FindWidth();
+                    length = Area.FindLength();
+                    break;
+                case 2:
+                    break;
+                default:
+                    Console.WriteLine("Invalid input");
+                    break;
+            }
+            Area.FindTargetArea(width, length, area);
 
-        static double area(double width, double height)
-        {
-            return width * height;
-        }
 
-        static double Length()
+        }
+        
+        
+    }
+
+    public class Area
+    {
+        public static double FindLength()
         {
             double length;
             Console.WriteLine("Enter length: ");
@@ -24,7 +43,7 @@
             return length;
         }
 
-        static double Width()
+        public static double FindWidth()
         {
             double width;
             Console.WriteLine("Enter width: ");
@@ -32,42 +51,25 @@
             return width;
         }
 
-        static double TargetArea()
+        public static double FindArea(double length, double width)
         {
-            double filterArea;
-
-            filterArea = area(Length(), Width());
-            Console.WriteLine("Filter Area: " + filterArea);
-            return filterArea;
+            return length * width;
         }
-        static void FindArea()
+
+        public static void FindTargetArea(double width, double length, double area) 
         {
-            double totalArea = 0;
-            double width = 0;
-
-
-            while (totalArea < TargetArea())
+            double targetArea = 0;
+            double height = 0;
+            while (targetArea < area)
             {
-                if (totalArea < TargetArea())
+                if (targetArea < area)
                 {
-                    totalArea = (Length() * width * 2) + (Width() * width * 2);
-                    Console.WriteLine("Total area: " + totalArea);
-                    width += 0.25;
-                }
-                else
-                {
-                    break;
+                    targetArea = (width * height * 2) + (length * height * 2);
+                    height += 0.125;
+                    Console.WriteLine(targetArea + ", " + height);
                 }
             }
-            Console.WriteLine("Width: " + width + " Area: " + totalArea);
+            Console.WriteLine("The target area is: " + targetArea + " at height: " + height);
         }
-
-
-
-    }
-    
-    public class Area
-    {
-        
     }
 }
