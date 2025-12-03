@@ -1,0 +1,15 @@
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\bin\Debug\net9.0\SalesMetricProgramTest.exe
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\bin\Debug\net9.0\SalesMetricProgramTest.deps.json
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\bin\Debug\net9.0\SalesMetricProgramTest.runtimeconfig.json
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\bin\Debug\net9.0\SalesMetricProgramTest.dll
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\bin\Debug\net9.0\SalesMetricProgramTest.pdb
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\obj\Debug\net9.0\SalesMetricProgramTest.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\obj\Debug\net9.0\SalesMetricProgramTest.AssemblyInfoInputs.cache
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\obj\Debug\net9.0\SalesMetricProgramTest.AssemblyInfo.cs
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\obj\Debug\net9.0\SalesMetricProgramTest.csproj.CoreCompileInputs.cache
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\obj\Debug\net9.0\SalesMetricProgramTest.sourcelink.json
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\obj\Debug\net9.0\SalesMetricProgramTest.dll
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\obj\Debug\net9.0\refint\SalesMetricProgramTest.dll
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\obj\Debug\net9.0\SalesMetricProgramTest.pdb
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\obj\Debug\net9.0\SalesMetricProgramTest.genruntimeconfig.cache
+C:\Users\OL GREG\Source\repos\PersonalProjects\SalesMetricProgramTest\SalesMetricProgramTest\obj\Debug\net9.0\ref\SalesMetricProgramTest.dll
