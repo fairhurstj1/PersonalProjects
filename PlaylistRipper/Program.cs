@@ -58,7 +58,7 @@ class Program
             }
 
             // 2) Ensure destination drive has enough free space per your min-free threshold
-            if (IsFreeSpaceThreatened(cfg.StagingFolder, cfg.MinFreeSpaceBytes, out var freeBytes))
+            if (IsFreeSpaceThreatened(cfg.StagingFolder, cfg.MinFreeSpaceBytes, nextBytes, out var freeBytes))
             {
                 Console.WriteLine($"\n⚠️  Warning: Low free space on staging drive.");
                 Console.WriteLine($"   Free now: {FormatBytes(freeBytes)}");
@@ -109,7 +109,7 @@ class Program
             }
 
             // 3) Download the video into staging
-            var archivePath = Path.Combine(cfg.StagingFolder, "archive.txt");
+            var archivePath = Path.Combine(@"D:\YTPlaylistRipper", "archive.txt");
 
             string args =
                 $"{YtDlpBaseArgs} " +
@@ -225,7 +225,7 @@ class Program
         return (stagingBytes + nextBytes) > zipThresholdBytes;
     }
 
-    static bool IsFreeSpaceThreatened(string stagingFolder, long minFreeBytes, out long freeBytes)
+    static bool IsFreeSpaceThreatened(string stagingFolder, long minFreeBytes, long nextBytes, out long freeBytes)
     {
         freeBytes = 0;
         try
@@ -236,6 +236,9 @@ class Program
             var drive = new DriveInfo(root);
             freeBytes = drive.AvailableFreeSpace;
 
+            if (nextBytes > 0)
+                return (freeBytes - nextBytes) < minFreeBytes;
+
             return freeBytes < minFreeBytes;
         }
         catch
@@ -243,6 +246,7 @@ class Program
             return false;
         }
     }
+
 
     // --------------------------
     // Zip/offload
@@ -259,7 +263,6 @@ class Program
 
         Console.WriteLine($"   📦 Creating zip: {zipPath}");
 
-        // If the zip exists somehow, make a unique name
         int bump = 1;
         while (File.Exists(zipPath))
         {
@@ -270,14 +273,27 @@ class Program
 
         ZipFile.CreateFromDirectory(stagingFolder, zipPath, CompressionLevel.Optimal, includeBaseDirectory: false);
 
+        // Safety check: zip exists and is non-empty
+        var zi = new FileInfo(zipPath);
+        if (!zi.Exists || zi.Length == 0)
+        {
+            Console.WriteLine("   ❌ Zip failed or is empty. NOT deleting staging.");
+            return;
+        }
+
+        Console.WriteLine($"   ✅ Zip complete: {FormatBytes(zi.Length)}");
         Console.WriteLine("   🧹 Clearing staging folder...");
 
-        // Keep archive.txt if you want resume across chunks (optional).
-        // For now, we keep it in staging so each chunk has its own archive.
-        // If you want one archive for the whole run, move archive.txt outside staging.
-        Directory.Delete(stagingFolder, true);
-        Directory.CreateDirectory(stagingFolder);
+        foreach (var file in Directory.EnumerateFiles(stagingFolder, "*", SearchOption.AllDirectories))
+        {
+            try { File.Delete(file); } catch { }
+        }
+        foreach (var dir in Directory.EnumerateDirectories(stagingFolder, "*", SearchOption.AllDirectories).OrderByDescending(d => d.Length))
+        {
+            try { Directory.Delete(dir, true); } catch { }
+        }
     }
+
 
     // --------------------------
     // Size estimation (best effort)
