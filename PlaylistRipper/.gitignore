@@ -1,0 +1,14 @@
+# Secrets / auth
+cookies.txt
+youtube-cookies.txt
+cookies*.txt
+*.cookies.txt
+
+# Build output
+bin/
+obj/
+
+# User-specific
+.vscode/
+*.user
+*.suo
