@@ -1,0 +1,15 @@
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\bin\Debug\net9.0\PlaylistRipper.exe
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\bin\Debug\net9.0\PlaylistRipper.deps.json
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\bin\Debug\net9.0\PlaylistRipper.runtimeconfig.json
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\bin\Debug\net9.0\PlaylistRipper.dll
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\bin\Debug\net9.0\PlaylistRipper.pdb
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\obj\Debug\net9.0\PlaylistRipper.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\obj\Debug\net9.0\PlaylistRipper.AssemblyInfoInputs.cache
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\obj\Debug\net9.0\PlaylistRipper.AssemblyInfo.cs
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\obj\Debug\net9.0\PlaylistRipper.csproj.CoreCompileInputs.cache
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\obj\Debug\net9.0\PlaylistRipper.sourcelink.json
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\obj\Debug\net9.0\PlaylistRipper.dll
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\obj\Debug\net9.0\refint\PlaylistRipper.dll
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\obj\Debug\net9.0\PlaylistRipper.pdb
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\obj\Debug\net9.0\PlaylistRipper.genruntimeconfig.cache
+C:\Users\OL GREG\Source\repos\PersonalProjects\PlaylistRipper\obj\Debug\net9.0\ref\PlaylistRipper.dll
