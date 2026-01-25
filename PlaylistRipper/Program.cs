@@ -18,7 +18,8 @@ class Program
         foreach (var url in videoUrls)
         {
             Console.WriteLine($"[{index}/{videoUrls.Count}] Downloading: {url}");
-            await RunProcess("yt-dlp", $"-f \"bv*+ba/b\" \"{url}\"");
+            await RunProcess("yt-dlp",
+                $"--js-runtimes deno --remote-components ejs:github --download-archive \"archive.txt\" -f \"bv*+ba/b\" \"{url}\"");
             index++;
         }
 
