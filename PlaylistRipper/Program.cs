@@ -6,6 +6,8 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
+using PlaylistRipper.Core;
+using PlaylistRipper.Models;
 
 class Program
 {
@@ -14,6 +16,10 @@ class Program
 
     static async Task Main()
     {
+        string rootFolder = @"D:\YTPlaylistRipper";
+        string sessionPath = Path.Combine(rootFolder, "session.json");
+        string archivePath = Path.Combine(rootFolder, "archive.txt");
+
         Console.Write("Enter YouTube playlist URL: ");
         string playlistUrl = (Console.ReadLine() ?? "").Trim();
 
@@ -22,32 +28,187 @@ class Program
             defaultStaging: @"D:\YTPlaylistRipper\Staging",
             defaultOffload: @"D:\YTPlaylistRipper\Offload",
             defaultZipThresholdGb: 2.0,
-            defaultMinFreeGb: 10.0
+            defaultMinFreeStagingGb: 10.0,
+            defaultMinFreeOffloadGb: 1.0
         );
+
 
         Directory.CreateDirectory(cfg.StagingFolder);
         Directory.CreateDirectory(cfg.OffloadFolder);
 
+        // Create a default session object (used if there is no previous session)
+        var session = new SessionState
+        {
+            PlaylistUrl = playlistUrl,
+            NextIndex = 1,
+            StagingFolder = cfg.StagingFolder,
+            OffloadFolder = cfg.OffloadFolder,
+            ZipThresholdBytes = cfg.ZipThresholdBytes,
+
+            // SessionState only has ONE min-free value right now.
+            // We treat it as "min free on STAGING drive".
+            MinFreeSpaceBytes = cfg.MinFreeStagingBytes,
+
+            FormatMode = "Best"
+        };
+
+
+        // Try to load an existing session
+        var existing = SessionStore.TryLoad(sessionPath);
+        if (existing != null)
+        {
+            Console.WriteLine($"\nFound previous session:");
+            Console.WriteLine($"  Playlist: {existing.PlaylistUrl}");
+            Console.WriteLine($"  NextIndex: {existing.NextIndex}");
+            Console.WriteLine($"  Staging: {existing.StagingFolder}");
+            Console.WriteLine($"  Offload: {existing.OffloadFolder}");
+
+            Console.Write("Resume it? (Y/N): ");
+            var ans = (Console.ReadLine() ?? "").Trim().ToUpperInvariant();
+
+            if (ans == "Y")
+            {
+                // Use the saved session
+                session = existing;
+
+                // Apply session settings back into playlistUrl + cfg
+                playlistUrl = session.PlaylistUrl;
+
+                cfg = new Config(
+                    session.StagingFolder,
+                    session.OffloadFolder,
+                    session.ZipThresholdBytes,
+
+                    // Persisted staging min-free from session
+                    session.MinFreeSpaceBytes,
+
+                    // Offload min-free isn't persisted yet; keep current cfg value
+                    cfg.MinFreeOffloadBytes
+                );
+
+                Directory.CreateDirectory(cfg.StagingFolder);
+                Directory.CreateDirectory(cfg.OffloadFolder);
+            }
+            else
+            {
+                SessionStore.Delete(sessionPath);
+            }
+        }
+
+        // Pull playlist videos
         var videoUrls = await GetPlaylistVideos(playlistUrl, cfg);
 
-        Console.WriteLine($"\nFound {videoUrls.Count} videos.\n");
+        Console.WriteLine($"\nFound {videoUrls.Count} videos.");
+        Console.WriteLine($"Resuming at index: {session.NextIndex}\n");
 
         int index = 1;
+
         foreach (var url in videoUrls)
         {
+            // Skip already-processed items when resuming
+            if (index < session.NextIndex)
+            {
+                index++;
+                continue;
+            }
+
             Console.WriteLine($"\n[{index}/{videoUrls.Count}] {url}");
 
             // 1) If staging + next video would exceed zip threshold, offload first
             long stagingBytes = GetFolderSize(cfg.StagingFolder);
+            long offloadBytes = GetFolderSize(cfg.OffloadFolder);
+            long totalBytes = stagingBytes + offloadBytes;
+
             long nextBytes = await TryEstimateVideoSizeBytes(url, cfg);
 
             Console.WriteLine($"   Staging: {FormatBytes(stagingBytes)}");
+            Console.WriteLine($"   Offload: {FormatBytes(offloadBytes)}");
+            Console.WriteLine($"   Total (staging+offload): {FormatBytes(totalBytes)}");
             Console.WriteLine($"   Next est: {(nextBytes > 0 ? FormatBytes(nextBytes) : "Unknown")}");
+
 
             if (WouldExceedZipThreshold(stagingBytes, nextBytes, cfg.ZipThresholdBytes))
             {
                 if (stagingBytes > 0)
                 {
+                    // BEFORE we zip: ensure OFFLOAD drive can accept a zip roughly the size of staging
+                    if (IsDriveSpaceThreatened(cfg.OffloadFolder, cfg.MinFreeOffloadBytes, stagingBytes, out var offloadFree))
+                    {
+                        Console.WriteLine($"\n⚠️  Warning: Low free space on OFFLOAD drive.");
+                        Console.WriteLine($"   Offload free now: {FormatBytes(offloadFree)}");
+                        Console.WriteLine($"   Need to add (zip est): {FormatBytes(stagingBytes)}");
+                        Console.WriteLine($"   Minimum required free space: {FormatBytes(cfg.MinFreeOffloadBytes)}");
+                        Console.WriteLine();
+                        Console.Write("Type P to pause & reconfigure, or C to continue anyway: ");
+
+                        var choice = (Console.ReadLine() ?? "").Trim().ToUpperInvariant();
+
+                        if (choice == "P")
+                        {
+                            Console.WriteLine("\nPaused. Enter new paths/thresholds to continue.");
+                            cfg = PromptConfig(
+                                defaultStaging: cfg.StagingFolder,
+                                defaultOffload: cfg.OffloadFolder,
+                                defaultZipThresholdGb: cfg.ZipThresholdBytes / (1024d * 1024 * 1024),
+                                defaultMinFreeStagingGb: cfg.MinFreeStagingBytes / (1024d * 1024 * 1024),
+                                defaultMinFreeOffloadGb: cfg.MinFreeOffloadBytes / (1024d * 1024 * 1024)
+                            );
+
+                            Directory.CreateDirectory(cfg.StagingFolder);
+                            Directory.CreateDirectory(cfg.OffloadFolder);
+
+                            // Keep session aligned with cfg
+                            session.StagingFolder = cfg.StagingFolder;
+                            session.OffloadFolder = cfg.OffloadFolder;
+                            session.ZipThresholdBytes = cfg.ZipThresholdBytes;
+                            session.MinFreeSpaceBytes = cfg.MinFreeStagingBytes;
+                            SessionStore.Save(sessionPath, session);
+                        }
+                        else if (choice == "C")
+                        {
+                            // Your spec: continuation requires new destination + parameters
+                            Console.WriteLine("\nContinuing requires new target destination + parameters.");
+                            cfg = PromptConfig(
+                                defaultStaging: cfg.StagingFolder,
+                                defaultOffload: cfg.OffloadFolder,
+                                defaultZipThresholdGb: cfg.ZipThresholdBytes / (1024d * 1024 * 1024),
+                                defaultMinFreeStagingGb: cfg.MinFreeStagingBytes / (1024d * 1024 * 1024),
+                                defaultMinFreeOffloadGb: cfg.MinFreeOffloadBytes / (1024d * 1024 * 1024)
+                            );
+
+
+                            Directory.CreateDirectory(cfg.StagingFolder);
+                            Directory.CreateDirectory(cfg.OffloadFolder);
+
+                            session.StagingFolder = cfg.StagingFolder;
+                            session.OffloadFolder = cfg.OffloadFolder;
+                            session.ZipThresholdBytes = cfg.ZipThresholdBytes;
+                            session.MinFreeSpaceBytes = cfg.MinFreeStagingBytes;
+                            SessionStore.Save(sessionPath, session);
+                        }
+                        else
+                        {
+                            Console.WriteLine("Invalid choice. Pausing by default.");
+                            cfg = PromptConfig(
+                                defaultStaging: cfg.StagingFolder,
+                                defaultOffload: cfg.OffloadFolder,
+                                defaultZipThresholdGb: cfg.ZipThresholdBytes / (1024d * 1024 * 1024),
+                                defaultMinFreeStagingGb: cfg.MinFreeStagingBytes / (1024d * 1024 * 1024),
+                                defaultMinFreeOffloadGb: cfg.MinFreeOffloadBytes / (1024d * 1024 * 1024)
+                            );
+
+
+                            Directory.CreateDirectory(cfg.StagingFolder);
+                            Directory.CreateDirectory(cfg.OffloadFolder);
+
+                            session.StagingFolder = cfg.StagingFolder;
+                            session.OffloadFolder = cfg.OffloadFolder;
+                            session.ZipThresholdBytes = cfg.ZipThresholdBytes;
+                            session.MinFreeSpaceBytes = cfg.MinFreeStagingBytes;
+                            SessionStore.Save(sessionPath, session);
+                        }
+                    }
+
                     Console.WriteLine($"   ▶ Zip threshold would be exceeded. Offloading staging first...");
                     ZipAndOffload(cfg.StagingFolder, cfg.OffloadFolder);
                 }
@@ -57,12 +218,13 @@ class Program
                 }
             }
 
+
             // 2) Ensure destination drive has enough free space per your min-free threshold
-            if (IsFreeSpaceThreatened(cfg.StagingFolder, cfg.MinFreeSpaceBytes, nextBytes, out var freeBytes))
+            if (IsDriveSpaceThreatened(cfg.StagingFolder, cfg.MinFreeStagingBytes, nextBytes, out var freeBytes))
             {
                 Console.WriteLine($"\n⚠️  Warning: Low free space on staging drive.");
                 Console.WriteLine($"   Free now: {FormatBytes(freeBytes)}");
-                Console.WriteLine($"   Minimum required free space: {FormatBytes(cfg.MinFreeSpaceBytes)}");
+                Console.WriteLine($"   Minimum required free space: {FormatBytes(cfg.MinFreeStagingBytes)}");
                 Console.WriteLine($"   Next download estimate: {(nextBytes > 0 ? FormatBytes(nextBytes) : "Unknown")}");
                 Console.WriteLine();
                 Console.Write("Type P to pause & reconfigure, or C to continue anyway: ");
@@ -75,8 +237,10 @@ class Program
                         defaultStaging: cfg.StagingFolder,
                         defaultOffload: cfg.OffloadFolder,
                         defaultZipThresholdGb: cfg.ZipThresholdBytes / (1024d * 1024 * 1024),
-                        defaultMinFreeGb: cfg.MinFreeSpaceBytes / (1024d * 1024 * 1024)
+                        defaultMinFreeStagingGb: cfg.MinFreeStagingBytes / (1024d * 1024 * 1024),
+                        defaultMinFreeOffloadGb: cfg.MinFreeOffloadBytes / (1024d * 1024 * 1024)
                     );
+
                     Directory.CreateDirectory(cfg.StagingFolder);
                     Directory.CreateDirectory(cfg.OffloadFolder);
                 }
@@ -88,9 +252,10 @@ class Program
                         defaultStaging: cfg.StagingFolder,
                         defaultOffload: cfg.OffloadFolder,
                         defaultZipThresholdGb: cfg.ZipThresholdBytes / (1024d * 1024 * 1024),
-                        defaultMinFreeGb: cfg.MinFreeSpaceBytes / (1024d * 1024 * 1024),
-                        forceNewPaths: true
+                        defaultMinFreeStagingGb: cfg.MinFreeStagingBytes / (1024d * 1024 * 1024),
+                        defaultMinFreeOffloadGb: cfg.MinFreeOffloadBytes / (1024d * 1024 * 1024)
                     );
+
                     Directory.CreateDirectory(cfg.StagingFolder);
                     Directory.CreateDirectory(cfg.OffloadFolder);
                 }
@@ -101,16 +266,32 @@ class Program
                         defaultStaging: cfg.StagingFolder,
                         defaultOffload: cfg.OffloadFolder,
                         defaultZipThresholdGb: cfg.ZipThresholdBytes / (1024d * 1024 * 1024),
-                        defaultMinFreeGb: cfg.MinFreeSpaceBytes / (1024d * 1024 * 1024)
+                        defaultMinFreeStagingGb: cfg.MinFreeStagingBytes / (1024d * 1024 * 1024),
+                        defaultMinFreeOffloadGb: cfg.MinFreeOffloadBytes / (1024d * 1024 * 1024)
                     );
+
                     Directory.CreateDirectory(cfg.StagingFolder);
                     Directory.CreateDirectory(cfg.OffloadFolder);
                 }
+
+                // IMPORTANT: session should follow cfg after reconfigure
+                session.StagingFolder = cfg.StagingFolder;
+                session.OffloadFolder = cfg.OffloadFolder;
+                session.ZipThresholdBytes = cfg.ZipThresholdBytes;
+                session.MinFreeSpaceBytes = cfg.MinFreeStagingBytes;
+                SessionStore.Save(sessionPath, session);
             }
 
-            // 3) Download the video into staging
-            var archivePath = Path.Combine(@"D:\YTPlaylistRipper", "archive.txt");
+            // Save session BEFORE download (crash-safe: you'll retry this index on resume)
+            session.PlaylistUrl = playlistUrl;
+            session.NextIndex = index;
+            session.StagingFolder = cfg.StagingFolder;
+            session.OffloadFolder = cfg.OffloadFolder;
+            session.ZipThresholdBytes = cfg.ZipThresholdBytes;
+            session.MinFreeSpaceBytes = cfg.MinFreeStagingBytes;
+            SessionStore.Save(sessionPath, session);
 
+            // 3) Download the video into staging
             string args =
                 $"{YtDlpBaseArgs} " +
                 $"--download-archive \"{archivePath}\" " +
@@ -125,8 +306,15 @@ class Program
                 Console.WriteLine($"   ❌ yt-dlp failed (exit {exitCode}). Skipping and continuing.");
             }
 
+            // Save progress AFTER attempt: next run starts at the next item
+            session.NextIndex = index + 1;
+            SessionStore.Save(sessionPath, session);
+
             index++;
         }
+
+        // Clean finish: remove session file
+        SessionStore.Delete(sessionPath);
 
         Console.WriteLine("\n✅ Done. (If staging still contains files, you can offload one final time.)");
 
@@ -147,13 +335,21 @@ class Program
     // Configuration / prompts
     // --------------------------
 
-    record Config(string StagingFolder, string OffloadFolder, long ZipThresholdBytes, long MinFreeSpaceBytes);
+    record Config(
+    string StagingFolder,
+    string OffloadFolder,
+    long ZipThresholdBytes,
+    long MinFreeStagingBytes,
+    long MinFreeOffloadBytes
+    );
+
 
     static Config PromptConfig(
         string defaultStaging,
         string defaultOffload,
         double defaultZipThresholdGb,
-        double defaultMinFreeGb,
+        double defaultMinFreeStagingGb,
+        double defaultMinFreeOffloadGb,
         bool forceNewPaths = false)
     {
         Console.WriteLine("\n--- Configuration ---");
@@ -162,12 +358,16 @@ class Program
         string offload = PromptPath("Offload folder", defaultOffload, required: true, forceNew: forceNewPaths);
 
         double zipGb = PromptDouble("Zip threshold (GB)", defaultZipThresholdGb, min: 0.05);
-        double minFreeGb = PromptDouble("Minimum free space on staging drive (GB)", defaultMinFreeGb, min: 0.5);
-
+        
         long zipBytes = (long)(zipGb * 1024 * 1024 * 1024);
-        long minFreeBytes = (long)(minFreeGb * 1024 * 1024 * 1024);
+        
+        double minFreeStagingGb = PromptDouble("Minimum free space on STAGING drive (GB)", defaultMinFreeStagingGb, min: 0.5);
+        double minFreeOffloadGb = PromptDouble("Minimum free space on OFFLOAD drive (GB)", defaultMinFreeOffloadGb, min: 0.1);
 
-        return new Config(staging, offload, zipBytes, minFreeBytes);
+        long minFreeStagingBytes = (long)(minFreeStagingGb * 1024 * 1024 * 1024);
+        long minFreeOffloadBytes = (long)(minFreeOffloadGb * 1024 * 1024 * 1024);
+
+        return new Config(staging, offload, zipBytes, minFreeStagingBytes, minFreeOffloadBytes);
     }
 
     static string PromptPath(string label, string defaultValue, bool required, bool forceNew)
@@ -225,27 +425,35 @@ class Program
         return (stagingBytes + nextBytes) > zipThresholdBytes;
     }
 
-    static bool IsFreeSpaceThreatened(string stagingFolder, long minFreeBytes, long nextBytes, out long freeBytes)
+    static long GetDriveFreeSpaceBytes(string anyFolderOnDrive)
     {
-        freeBytes = 0;
         try
         {
-            var root = Path.GetPathRoot(Path.GetFullPath(stagingFolder));
-            if (string.IsNullOrWhiteSpace(root)) return false;
+            var root = Path.GetPathRoot(Path.GetFullPath(anyFolderOnDrive));
+            if (string.IsNullOrWhiteSpace(root)) return -1;
 
             var drive = new DriveInfo(root);
-            freeBytes = drive.AvailableFreeSpace;
-
-            if (nextBytes > 0)
-                return (freeBytes - nextBytes) < minFreeBytes;
-
-            return freeBytes < minFreeBytes;
+            return drive.AvailableFreeSpace;
         }
         catch
         {
-            return false;
+            return -1;
         }
     }
+
+    static bool IsDriveSpaceThreatened(string folderOnDrive, long minFreeBytes, long bytesToAdd, out long freeBytes)
+    {
+        freeBytes = GetDriveFreeSpaceBytes(folderOnDrive);
+        if (freeBytes < 0) return false; // couldn't determine -> don't block
+
+        // If we know how many bytes we’re about to add, check "free-after-add"
+        if (bytesToAdd > 0)
+            return (freeBytes - bytesToAdd) < minFreeBytes;
+
+        // Otherwise just check the raw free space
+        return freeBytes < minFreeBytes;
+    }
+
 
 
     // --------------------------
@@ -294,16 +502,12 @@ class Program
         }
     }
 
-
     // --------------------------
     // Size estimation (best effort)
     // --------------------------
 
     static async Task<long> TryEstimateVideoSizeBytes(string videoUrl, Config cfg)
     {
-        // Ask yt-dlp for approximate size. Not always available.
-        // --no-download ensures we only query metadata.
-        // We print filesize_approx if present.
         string args =
             $"{YtDlpBaseArgs} " +
             $"--no-download " +
@@ -316,9 +520,7 @@ class Program
         var line = output.Split('\n').Select(s => s.Trim()).FirstOrDefault(s => s.Length > 0);
         if (line == null) return -1;
 
-        // filesize_approx comes as bytes if available
         if (long.TryParse(line, out long bytes) && bytes > 0) return bytes;
-
         return -1;
     }
 
@@ -390,7 +592,6 @@ class Program
         string err = await p.StandardError.ReadToEndAsync();
         await p.WaitForExitAsync();
 
-        // Sometimes useful metadata prints to stderr; include it if stdout is empty
         if (string.IsNullOrWhiteSpace(output) && !string.IsNullOrWhiteSpace(err))
             return err;
 
@@ -410,7 +611,7 @@ class Program
         foreach (var file in Directory.EnumerateFiles(folderPath, "*", SearchOption.AllDirectories))
         {
             try { total += new FileInfo(file).Length; }
-            catch { /* ignore */ }
+            catch { }
         }
         return total;
     }
