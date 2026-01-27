@@ -11,7 +11,13 @@ public record PromptedConfig(
     string OffloadFolder,
     long ZipThresholdBytes,
     long MinFreeStagingBytes,
-    long MinFreeOffloadBytes
+    long MinFreeOffloadBytes,
+    string CookiesFromBrowser,
+    string AuthArgs,
+    int MaxAttempts,
+    int BaseDelaySeconds,
+    int MaxDelaySeconds,
+    int PoliteDelaySeconds
 );
 
 public class ConsoleUi
@@ -23,8 +29,26 @@ public class ConsoleUi
     public bool Confirm(string prompt)
     {
         Write(prompt);
-        return ((ReadLine() ?? "").Trim().ToUpperInvariant()) == "Y";
+        return (ReadLine() ?? "").Trim().ToUpperInvariant() == "Y";
     }
+
+    public int PromptStartIndex(int suggested, int max)
+    {
+        Write($"Start from which video index? [Enter = {suggested}, 1-{max}]: ");
+        var input = (ReadLine() ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(input)) return suggested;
+
+        if (int.TryParse(input, out var val))
+        {
+            if (val < 1) return 1;
+            if (val > max) return max;
+            return val;
+        }
+
+        WriteLine("   Invalid number. Using suggested value.");
+        return suggested;
+    }
+
 
     public PromptedConfig PromptConfig(
         string defaultRoot,
@@ -32,7 +56,8 @@ public class ConsoleUi
         string defaultOffload,
         double defaultZipThresholdGb,
         double defaultMinFreeStagingGb,
-        double defaultMinFreeOffloadGb)
+        double defaultMinFreeOffloadGb,
+        string defaultAuthArgs = "")
     {
         WriteLine("\n--- Configuration ---");
         string root = PromptPath("Root folder", defaultRoot);
@@ -43,15 +68,39 @@ public class ConsoleUi
         double minStageGb = PromptDouble("Minimum free space on STAGING drive (GB)", defaultMinFreeStagingGb, min: 0.1);
         double minOffGb = PromptDouble("Minimum free space on OFFLOAD drive (GB)", defaultMinFreeOffloadGb, min: 0.05);
 
+        string cookies = PromptCookiesFromBrowser();
+
+
+        Write("Optional yt-dlp auth args (cookies/login). Leave blank for none.\nExample: --cookies \"C:\\path\\cookies.txt\"");
+        string authArgs = (ReadLine() ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(authArgs))
+            authArgs = defaultAuthArgs;
+
+        int maxAttempts = (int)PromptDouble("Max retry attempts per video", 4, min: 1);
+        int baseDelay = (int)PromptDouble("Retry base delay (seconds)", 10, min: 1);
+        int maxDelay  = (int)PromptDouble("Retry max delay (seconds)", 120, min: 1);
+
+        // Optional: polite spacing between successful downloads (not evasion; just less hammering)
+        int politeDelay = (int)PromptDouble("Polite delay after each successful download (seconds)", 2, min: 0);
+
+
         return new PromptedConfig(
             RootFolder: root,
             StagingFolder: staging,
             OffloadFolder: offload,
             ZipThresholdBytes: (long)(zipGb * Bytes.GB),
             MinFreeStagingBytes: (long)(minStageGb * Bytes.GB),
-            MinFreeOffloadBytes: (long)(minOffGb * Bytes.GB)
+            MinFreeOffloadBytes: (long)(minOffGb * Bytes.GB),
+            CookiesFromBrowser: cookies,
+            AuthArgs: authArgs,
+            MaxAttempts: maxAttempts,
+            BaseDelaySeconds: baseDelay,
+            MaxDelaySeconds: maxDelay,
+            PoliteDelaySeconds: politeDelay
         );
+
     }
+
 
     public LowSpaceAction LowSpacePrompt(string driveLabel, long freeBytes, long minFreeBytes, long bytesToAdd)
     {
@@ -65,6 +114,14 @@ public class ConsoleUi
         var choice = (ReadLine() ?? "").Trim().ToUpperInvariant();
         return choice == "R" ? LowSpaceAction.Reconfigure : LowSpaceAction.Continue;
     }
+
+    private static int Clamp(int value, int min, int max)
+    {
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
+    }
+
 
     private static string PromptPath(string label, string defaultValue)
     {
@@ -92,4 +149,15 @@ public class ConsoleUi
             Console.WriteLine($"   Enter a number >= {min} (use decimals like 0.5).");
         }
     }
+
+    private static string PromptCookiesFromBrowser()
+    {
+        Console.Write("Optional cookies.txt path for YouTube login (recommended). Leave blank for none.\nCookies path: ");
+        var input = (Console.ReadLine() ?? "").Trim();
+
+        // Return empty = no cookies
+        return input;
+    }
+
+
 }

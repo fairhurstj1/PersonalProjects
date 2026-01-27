@@ -32,6 +32,32 @@ public class ProcessRunner
         return p.ExitCode;
     }
 
+    public async Task<(int exitCode, string output)> RunWithOutputAsync(string file, string args)
+    {
+        var p = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = file,
+                Arguments = args,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            }
+        };
+
+        p.Start();
+
+        string stdout = await p.StandardOutput.ReadToEndAsync();
+        string stderr = await p.StandardError.ReadToEndAsync();
+
+        await p.WaitForExitAsync();
+
+        string combined = stdout + "\n" + stderr;
+        return (p.ExitCode, combined);
+    }
+
+
     public async Task<string> CaptureAsync(string file, string args)
     {
         var p = new Process

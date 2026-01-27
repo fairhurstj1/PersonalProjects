@@ -1,10 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "wT6iG8nnqgY=",
+  "dgSpecHash": "c5CEyPxFpDQ=",
   "success": true,
   "projectFilePath": "C:\\Users\\OL GREG\\Source\\repos\\PersonalProjects\\PlaylistRipper\\PlaylistRipper.csproj",
-  "expectedPackageFiles": [
-    "C:\\Users\\OL GREG\\.nuget\\packages\\microsoft.net.illink.tasks\\9.0.9\\microsoft.net.illink.tasks.9.0.9.nupkg.sha512"
-  ],
+  "expectedPackageFiles": [],
   "logs": []
 }

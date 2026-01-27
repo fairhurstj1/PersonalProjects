@@ -36,6 +36,8 @@ public class App
         _ui.Write("Enter YouTube playlist URL: ");
         string playlistUrl = (_ui.ReadLine() ?? "").Trim();
 
+        var retry = new RetryPolicy(_ui);
+
         // Prompt config
         var cfg = _ui.PromptConfig(
             defaultRoot: rootFolder,
@@ -55,8 +57,15 @@ public class App
             MinFreeOffloadBytes: cfg.MinFreeOffloadBytes,
             ArchivePath: archivePath,
             SessionPath: sessionPath,
-            YtDlpBaseArgs: ytBaseArgs
+            YtDlpBaseArgs: ytBaseArgs,
+            CookiesFromBrowser: cfg.CookiesFromBrowser,
+            AuthArgs: cfg.AuthArgs,
+            MaxAttempts: cfg.MaxAttempts,
+            BaseDelaySeconds: cfg.BaseDelaySeconds,
+            MaxDelaySeconds: cfg.MaxDelaySeconds,
+            PoliteDelaySeconds: cfg.PoliteDelaySeconds
         );
+
 
         Directory.CreateDirectory(appCfg.RootFolder);
         Directory.CreateDirectory(appCfg.StagingFolder);
@@ -72,7 +81,9 @@ public class App
             ZipThresholdBytes = appCfg.ZipThresholdBytes,
             MinFreeStagingBytes = appCfg.MinFreeStagingBytes,
             MinFreeOffloadBytes = appCfg.MinFreeOffloadBytes,
-            FormatMode = "Best"
+            FormatMode = "Best",
+            CookiesFromBrowser = appCfg.CookiesFromBrowser,
+            AuthArgs = appCfg.AuthArgs
         };
 
         var existing = _session.TryLoad(appCfg.SessionPath);
@@ -98,7 +109,9 @@ public class App
                     OffloadFolder = current.OffloadFolder,
                     ZipThresholdBytes = current.ZipThresholdBytes,
                     MinFreeStagingBytes = current.MinFreeStagingBytes,
-                    MinFreeOffloadBytes = current.MinFreeOffloadBytes
+                    MinFreeOffloadBytes = current.MinFreeOffloadBytes,
+                    CookiesFromBrowser = current.CookiesFromBrowser,
+                    AuthArgs = current.AuthArgs
                 };
 
                 Directory.CreateDirectory(appCfg.StagingFolder);
@@ -110,10 +123,40 @@ public class App
             }
         }
 
+        // Build yt-dlp args (base args + optional cookies file)
+        string ytArgs = appCfg.YtDlpBaseArgs;
+
+        if (!string.IsNullOrWhiteSpace(appCfg.CookiesFromBrowser))
+        {
+            ytArgs += $" --cookies \"{appCfg.CookiesFromBrowser}\"";
+        }
+
+
         // Pull playlist URLs
-        var videoUrls = await _yt.GetPlaylistVideosAsync(playlistUrl, appCfg.YtDlpBaseArgs);
+        List<string> videoUrls;
+        try
+        {
+            videoUrls = await _yt.GetPlaylistVideosAsync(playlistUrl, ytArgs, appCfg.AuthArgs);
+        }
+        catch (Exception ex)
+        {
+            _ui.WriteLine("\n❌ Could not read playlist. yt-dlp said:");
+            _ui.WriteLine(ex.Message);
+            return;
+        }
+
+        if (videoUrls.Count == 0)
+        {
+            _ui.WriteLine("\n❌ yt-dlp returned no items (but no explicit ERROR).");
+            return;
+        }
+
         _ui.WriteLine($"\nFound {videoUrls.Count} videos.");
-        _ui.WriteLine($"Resuming at index: {current.NextIndex}\n");
+        int chosenStart = _ui.PromptStartIndex(current.NextIndex, videoUrls.Count);
+        current.NextIndex = chosenStart;
+        _session.Save(appCfg.SessionPath, current);
+
+        _ui.WriteLine($"Starting at index: {current.NextIndex}\n");
 
         // Main loop
         for (int index = 1; index <= videoUrls.Count; index++)
@@ -127,7 +170,8 @@ public class App
 
             long stagingBytes = _disk.GetFolderSize(appCfg.StagingFolder);
             long offloadBytes = _disk.GetFolderSize(appCfg.OffloadFolder);
-            long nextBytes = await _yt.TryEstimateVideoSizeBytesAsync(url, appCfg.YtDlpBaseArgs);
+            long nextBytes = await _yt.TryEstimateVideoSizeBytesAsync(url, ytArgs, appCfg.AuthArgs);
+
 
             _ui.WriteLine($"   Staging: {Bytes.Format(stagingBytes)}");
             _ui.WriteLine($"   Offload: {Bytes.Format(offloadBytes)}");
@@ -220,26 +264,69 @@ public class App
             current.ZipThresholdBytes = appCfg.ZipThresholdBytes;
             current.MinFreeStagingBytes = appCfg.MinFreeStagingBytes;
             current.MinFreeOffloadBytes = appCfg.MinFreeOffloadBytes;
+            current.AuthArgs = appCfg.AuthArgs;
             _session.Save(appCfg.SessionPath, current);
 
             // Download
-            int exit = await _yt.DownloadVideoAsync(
-                url: url,
-                stagingFolder: appCfg.StagingFolder,
-                archivePath: appCfg.ArchivePath,
-                ytBaseArgs: appCfg.YtDlpBaseArgs
+            var (exit, output) = await retry.RunWithRetriesAsync(
+                action: () => _yt.DownloadVideoAsync(
+                    url: url,
+                    stagingFolder: appCfg.StagingFolder,
+                    archivePath: appCfg.ArchivePath,
+                    ytBaseArgs: ytArgs,
+                    authArgs: appCfg.AuthArgs
+                ),
+                maxAttempts: appCfg.MaxAttempts,
+                baseDelaySeconds: appCfg.BaseDelaySeconds,
+                maxDelaySeconds: appCfg.MaxDelaySeconds,
+                classify: (code, text) => YtFailure.Classify(code, text)
             );
 
-            if (exit != 0)
-                _ui.WriteLine($"   ❌ yt-dlp failed (exit {exit}). Skipping and continuing.");
+            var kind = YtFailure.Classify(exit, output);
 
-            // Save progress AFTER attempt
-            current.NextIndex = index + 1;
-            _session.Save(appCfg.SessionPath, current);
+            if (exit != 0)
+            {
+                _ui.WriteLine($"   ❌ yt-dlp failed ({kind}).");
+
+                if (kind == FailureKind.AuthRequired)
+                {
+                    _ui.WriteLine("   🔒 Login / age restriction detected. Fix auth settings then rerun.");
+                    _session.Save(appCfg.SessionPath, current);
+                    return; // stop safely
+                }
+
+                if (kind == FailureKind.RateLimited)
+                {
+                    _ui.WriteLine("   🛑 Rate limit detected. Pausing so you can wait and restart later.");
+                    _session.Save(appCfg.SessionPath, current);
+                    return; // stop safely
+                }
+
+                _ui.WriteLine("   ↪ Skipping this video and continuing.");
+            }
+            else
+            {
+                // Optional polite delay after success
+                if (appCfg.PoliteDelaySeconds > 0)
+                    await Task.Delay(TimeSpan.FromSeconds(appCfg.PoliteDelaySeconds));
+            }
+
+            // Advance only if success OR skippable failure
+            bool shouldAdvanceIndex =
+                exit == 0 ||
+                (kind != FailureKind.AuthRequired && kind != FailureKind.RateLimited);
+
+            if (shouldAdvanceIndex)
+            {
+                current.NextIndex = index + 1;
+                current.AuthArgs = appCfg.AuthArgs;
+                _session.Save(appCfg.SessionPath, current);
+            }
+
         }
 
         _session.Delete(appCfg.SessionPath);
-        _ui.WriteLine("\n✅ Done.");
+        _ui.WriteLine("\n✅ Done."); 
 
         // Optional final offload
         long remaining = _disk.GetFolderSize(appCfg.StagingFolder);

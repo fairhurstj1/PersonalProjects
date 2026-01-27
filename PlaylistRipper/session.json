@@ -1,9 +1,0 @@
-{
-  "playlistUrl": "...",
-  "currentIndex": 7,
-  "stagingFolder": "...",
-  "offloadFolder": "...",
-  "zipThresholdBytes": 2147483648,
-  "minFreeBytes": 10737418240,
-  "formatMode": "Best"
-}

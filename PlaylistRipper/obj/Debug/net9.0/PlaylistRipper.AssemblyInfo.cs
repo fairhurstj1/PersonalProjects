@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PlaylistRipper")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ea70e07739fa1dcc5c0358c784a7d9d1d3e876af")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+bcfd17be1d6709861e8efbfe10ad9bf8154dffae")]
 [assembly: System.Reflection.AssemblyProductAttribute("PlaylistRipper")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PlaylistRipper")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

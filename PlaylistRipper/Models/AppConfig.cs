@@ -9,5 +9,11 @@ public record AppConfig(
     long MinFreeOffloadBytes,
     string ArchivePath,
     string SessionPath,
-    string YtDlpBaseArgs
+    string YtDlpBaseArgs,
+    string CookiesFromBrowser,
+    string AuthArgs,
+    int MaxAttempts,
+    int BaseDelaySeconds,
+    int MaxDelaySeconds,
+    int PoliteDelaySeconds
 );

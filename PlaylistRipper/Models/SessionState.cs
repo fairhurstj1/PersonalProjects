@@ -13,4 +13,8 @@ public class SessionState
     public long MinFreeOffloadBytes { get; set; }
 
     public string FormatMode { get; set; } = "Best";
+
+    public string AuthArgs { get; set; } = "";
+    public string CookiesFromBrowser { get; set; } = "";
+
 }
