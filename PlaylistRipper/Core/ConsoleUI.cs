@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.IO;
 
 namespace PlaylistRipper.Core;
 
@@ -12,12 +13,22 @@ public record PromptedConfig(
     long ZipThresholdBytes,
     long MinFreeStagingBytes,
     long MinFreeOffloadBytes,
+
+    // Auth
     string CookiesFromBrowser,
+    string CookiesFilePath,
     string AuthArgs,
+
+    // Retry / pacing
     int MaxAttempts,
     int BaseDelaySeconds,
     int MaxDelaySeconds,
-    int PoliteDelaySeconds
+    int PoliteDelaySeconds,
+
+    // Reliability caps
+    int MaxDownloadsPerRun,
+    int BreakEveryNDownloads,
+    int BreakSeconds
 );
 
 public class ConsoleUi
@@ -49,7 +60,6 @@ public class ConsoleUi
         return suggested;
     }
 
-
     public PromptedConfig PromptConfig(
         string defaultRoot,
         string defaultStaging,
@@ -57,7 +67,9 @@ public class ConsoleUi
         double defaultZipThresholdGb,
         double defaultMinFreeStagingGb,
         double defaultMinFreeOffloadGb,
-        string defaultAuthArgs = "")
+        string defaultAuthArgs = "",
+        string defaultCookiesFilePath = ""
+    )
     {
         WriteLine("\n--- Configuration ---");
         string root = PromptPath("Root folder", defaultRoot);
@@ -68,21 +80,26 @@ public class ConsoleUi
         double minStageGb = PromptDouble("Minimum free space on STAGING drive (GB)", defaultMinFreeStagingGb, min: 0.1);
         double minOffGb = PromptDouble("Minimum free space on OFFLOAD drive (GB)", defaultMinFreeOffloadGb, min: 0.05);
 
-        string cookies = PromptCookiesFromBrowser();
+        WriteLine("\n--- Auth (recommended) ---");
+        string cookiesFile = PromptCookiesFile(defaultCookiesFilePath);
 
+        // Keep this for convenience, but it’s optional and can fail on Windows (DPAPI)
+        string cookiesFromBrowser = PromptCookiesFromBrowser();
 
-        Write("Optional yt-dlp auth args (cookies/login). Leave blank for none.\nExample: --cookies \"C:\\path\\cookies.txt\"");
+        Write("Optional yt-dlp extra auth args (leave blank for none)\nExample: --username ... --password ...\nAuth args: ");
         string authArgs = (ReadLine() ?? "").Trim();
         if (string.IsNullOrWhiteSpace(authArgs))
             authArgs = defaultAuthArgs;
 
+        WriteLine("\n--- Reliability ---");
         int maxAttempts = (int)PromptDouble("Max retry attempts per video", 4, min: 1);
         int baseDelay = (int)PromptDouble("Retry base delay (seconds)", 10, min: 1);
         int maxDelay  = (int)PromptDouble("Retry max delay (seconds)", 120, min: 1);
-
-        // Optional: polite spacing between successful downloads (not evasion; just less hammering)
         int politeDelay = (int)PromptDouble("Polite delay after each successful download (seconds)", 2, min: 0);
 
+        int maxDownloadsPerRun = (int)PromptDouble("Max downloads per run (0 = unlimited)", 50, min: 0);
+        int breakEvery = (int)PromptDouble("Take a break every N downloads (0 = none)", 15, min: 0);
+        int breakSeconds = (int)PromptDouble("Break duration in seconds", 120, min: 0);
 
         return new PromptedConfig(
             RootFolder: root,
@@ -91,16 +108,21 @@ public class ConsoleUi
             ZipThresholdBytes: (long)(zipGb * Bytes.GB),
             MinFreeStagingBytes: (long)(minStageGb * Bytes.GB),
             MinFreeOffloadBytes: (long)(minOffGb * Bytes.GB),
-            CookiesFromBrowser: cookies,
+
+            CookiesFromBrowser: cookiesFromBrowser,
+            CookiesFilePath: cookiesFile,
             AuthArgs: authArgs,
+
             MaxAttempts: maxAttempts,
             BaseDelaySeconds: baseDelay,
             MaxDelaySeconds: maxDelay,
-            PoliteDelaySeconds: politeDelay
+            PoliteDelaySeconds: politeDelay,
+
+            MaxDownloadsPerRun: maxDownloadsPerRun,
+            BreakEveryNDownloads: breakEvery,
+            BreakSeconds: breakSeconds
         );
-
     }
-
 
     public LowSpaceAction LowSpacePrompt(string driveLabel, long freeBytes, long minFreeBytes, long bytesToAdd)
     {
@@ -114,14 +136,6 @@ public class ConsoleUi
         var choice = (ReadLine() ?? "").Trim().ToUpperInvariant();
         return choice == "R" ? LowSpaceAction.Reconfigure : LowSpaceAction.Continue;
     }
-
-    private static int Clamp(int value, int min, int max)
-    {
-        if (value < min) return min;
-        if (value > max) return max;
-        return value;
-    }
-
 
     private static string PromptPath(string label, string defaultValue)
     {
@@ -152,12 +166,31 @@ public class ConsoleUi
 
     private static string PromptCookiesFromBrowser()
     {
-        Console.Write("Optional cookies.txt path for YouTube login (recommended). Leave blank for none.\nCookies path: ");
-        var input = (Console.ReadLine() ?? "").Trim();
+        Console.Write("Optional: cookies-from-browser? (chrome/edge/firefox/none) [none]: ");
+        var input = (Console.ReadLine() ?? "").Trim().ToLowerInvariant();
 
-        // Return empty = no cookies
-        return input;
+        if (string.IsNullOrWhiteSpace(input) || input is "none" or "n")
+            return "";
+
+        if (input is "chrome" or "edge" or "firefox")
+            return input;
+
+        Console.WriteLine("   Unrecognized option. Using 'none'.");
+        return "";
     }
 
+    private static string PromptCookiesFile(string defaultPath)
+    {
+        Console.Write($"Cookies file path (recommended). [Enter = {defaultPath}]: ");
+        var input = (Console.ReadLine() ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(input)) input = defaultPath;
 
+        if (string.IsNullOrWhiteSpace(input)) return "";
+        if (!File.Exists(input))
+        {
+            Console.WriteLine("   File not found. Leaving cookies file blank.");
+            return "";
+        }
+        return input;
+    }
 }

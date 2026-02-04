@@ -9,11 +9,22 @@ public record AppConfig(
     long MinFreeOffloadBytes,
     string ArchivePath,
     string SessionPath,
+    string LogPath,
     string YtDlpBaseArgs,
-    string CookiesFromBrowser,
-    string AuthArgs,
+
+    // Auth
+    string CookiesFromBrowser,   // optional
+    string CookiesFilePath,      // preferred
+    string AuthArgs,             // optional extra args
+
+    // Retry / pacing
     int MaxAttempts,
     int BaseDelaySeconds,
     int MaxDelaySeconds,
-    int PoliteDelaySeconds
+    int PoliteDelaySeconds,
+
+    // Reliability caps
+    int MaxDownloadsPerRun,      // 0 = unlimited
+    int BreakEveryNDownloads,    // 0 = none
+    int BreakSeconds             // break duration
 );

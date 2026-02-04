@@ -12,9 +12,8 @@ public class SessionState
     public long MinFreeStagingBytes { get; set; }
     public long MinFreeOffloadBytes { get; set; }
 
-    public string FormatMode { get; set; } = "Best";
-
+    // Auth persisted
     public string AuthArgs { get; set; } = "";
     public string CookiesFromBrowser { get; set; } = "";
-
+    public string CookiesFilePath { get; set; } = "";
 }

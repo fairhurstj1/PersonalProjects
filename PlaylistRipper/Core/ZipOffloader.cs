@@ -42,9 +42,10 @@ public class ZipOffloader
             try { File.Delete(file); } catch { }
         }
         foreach (var dir in Directory.EnumerateDirectories(stagingFolder, "*", SearchOption.AllDirectories)
-                                     .OrderByDescending(d => d.Length))
+                             .OrderByDescending(d => d.Count(c => c == Path.DirectorySeparatorChar)))
         {
             try { Directory.Delete(dir, true); } catch { }
         }
+
     }
 }

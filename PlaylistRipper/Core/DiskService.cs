@@ -33,6 +33,27 @@ public class DiskService
         }
     }
 
+    public long GetEffectiveZipThresholdBytes(string offloadFolder, long configuredZipThresholdBytes, long minFreeOffloadBytes)
+    {
+        // How much room can we safely consume on OFFLOAD right now?
+        long free = GetDriveFreeSpaceBytes(offloadFolder);
+        if (free <= 0) return configuredZipThresholdBytes; // can't measure, fall back to configured
+
+        long safeUsable = free - minFreeOffloadBytes;
+
+        // If safeUsable <= 0, OFFLOAD is already below the minimum free buffer.
+        if (safeUsable <= 0) return 0;
+
+        // Effective threshold is whichever is smaller:
+        // - the user configured max chunk size
+        // - what OFFLOAD can safely accept right now
+        long effective = Math.Min(configuredZipThresholdBytes, safeUsable);
+
+        // Never allow negative
+        return Math.Max(0, effective);
+    }
+
+
     public bool IsDriveSpaceThreatened(string folderOnDrive, long minFreeBytes, long bytesToAdd, out long freeBytes)
     {
         freeBytes = GetDriveFreeSpaceBytes(folderOnDrive);
